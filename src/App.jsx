@@ -155,7 +155,7 @@ function OpportunityCard({ o, app, selected, onToggle }) {
         {o.job_type && <span className="tag">{o.job_type}</span>}
         {o.language_req && <span className="tag">🗣 {o.language_req}</span>}
         {o.deadline && <span className={`tag ${expired ? 'warn' : ''}`}>⏰ {fmtDate(o.deadline)}</span>}
-        {o.is_speculative && <span className="tag">Speculative</span>}
+        {o.is_speculative && o.job_type !== 'Speculative' && <span className="tag">Speculative</span>}
         {o.status !== 'open' && <span className="tag warn">{o.status}</span>}
       </div>
       {open && (
