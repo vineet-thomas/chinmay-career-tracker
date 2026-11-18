@@ -157,6 +157,7 @@ function OpportunityCard({ o, app, selected, onToggle }) {
         {o.deadline && <span className={`tag ${expired ? 'warn' : ''}`}>⏰ {fmtDate(o.deadline)}</span>}
         {o.is_speculative && o.job_type !== 'Speculative' && <span className="tag">Speculative</span>}
         {o.status !== 'open' && <span className="tag warn">{o.status}</span>}
+        {o.source && o.source !== 'claude' && <span className="tag">via {o.source}</span>}
       </div>
       {open && (
         <dl className="details">
@@ -480,6 +481,54 @@ function Insights({ apps }) {
   )
 }
 
+/* ---------------- Import (admin) ---------------- */
+function ImportScreen({ reload }) {
+  const [text, setText] = useState('')
+  const [source, setSource] = useState('grok')
+  const [res, setRes] = useState(null)
+  const [err, setErr] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    setErr(null); setRes(null)
+    let items
+    try {
+      const m = text.match(/\[[\s\S]*\]|\{[\s\S]*\}/)
+      const parsed = JSON.parse(m ? m[0] : text)
+      items = Array.isArray(parsed) ? parsed : parsed.items
+      if (!Array.isArray(items)) throw new Error('Expected a JSON array or { "items": [...] }')
+    } catch (x) { return setErr('Could not read JSON: ' + x.message) }
+    setBusy(true)
+    const { data, error } = await supabase.rpc('import_opportunities', { items, p_source: source })
+    setBusy(false)
+    if (error) return setErr(error.message)
+    setRes(data); setText(''); reload()
+  }
+  return (
+    <>
+      <h3>Import opportunities from another AI</h3>
+      <p className="muted small">Paste the JSON that Grok, Gemini or ChatGPT produced. Duplicates are skipped automatically and new items get the next code in their section.</p>
+      <label className="toggle">Source&nbsp;
+        <select value={source} onChange={(e) => setSource(e.target.value)} style={{ width: 'auto' }}>
+          {['grok', 'gemini', 'chatgpt', 'claude', 'other'].map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </label>
+      <textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} placeholder='[ { "section": "A", "employer": "…", "role": "…", … } ]' />
+      <p><button className="btn primary" disabled={busy || !text} onClick={run}>{busy ? 'Importing…' : 'Import'}</button></p>
+      {err && <p className="error">{err}</p>}
+      {res && (
+        <div className="card">
+          <b>Added {res.added.length}</b>
+          <ul className="statlist">{res.added.map((a) => <li key={a.code}>{a.code} – {a.employer} – {a.role}</li>)}</ul>
+          <b>Skipped as duplicates {res.skipped_duplicates.length}</b>
+          <ul className="statlist">{res.skipped_duplicates.map((a, i) => <li key={i}>{a.employer} – {a.role} (= {a.duplicate_of})</li>)}</ul>
+          {res.rejected.length > 0 && <><b>Rejected {res.rejected.length}</b>
+            <ul className="statlist">{res.rejected.map((a, i) => <li key={i}>{a.item?.employer || '?'} – {a.reason}</li>)}</ul></>}
+        </div>
+      )}
+    </>
+  )
+}
+
 /* ---------------- App shell ---------------- */
 export default function App() {
   const [session, setSession] = useState(null)
@@ -547,6 +596,7 @@ export default function App() {
         {tab === 'opps' && <Opportunities opps={opps} apps={apps} sections={sections} reload={load} />}
         {tab === 'apps' && <Applications apps={apps} reload={load} />}
         {tab === 'insights' && <Insights apps={apps} />}
+        {tab === 'import' && me?.role === 'admin' && <ImportScreen reload={load} />}
       </main>
       <nav className="tabs">
         <button className={tab === 'opps' ? 'on' : ''} onClick={() => setTab('opps')}>🔎<span>Opportunities</span></button>
@@ -554,6 +604,7 @@ export default function App() {
           📋<span>Applications{pending ? ` (${pending})` : ''}</span>
         </button>
         <button className={tab === 'insights' ? 'on' : ''} onClick={() => setTab('insights')}>📈<span>Insights</span></button>
+        {me?.role === 'admin' && <button className={tab === 'import' ? 'on' : ''} onClick={() => setTab('import')}>📥<span>Import</span></button>}
       </nav>
     </div>
   )
