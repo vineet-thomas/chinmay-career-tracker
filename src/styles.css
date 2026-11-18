@@ -101,3 +101,6 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-
 .kpi span { font-size: 12px; color: var(--muted); }
 .statlist { margin: 8px 0 0; padding-left: 18px; font-size: 14px; display: grid; gap: 3px; }
 @media (min-width: 600px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+
+.src-select { width: auto; padding: 6px 8px; font-size: 13px; border-radius: 8px; }
+.tag.src { background: #f3eefc; }

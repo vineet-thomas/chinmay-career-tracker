@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase.js'
 
 const SECTION_COLORS = { A: '#1e7d4f', B: '#b5651d', C: '#7a4fb5', D: '#2b6cb0', E: '#c0392b' }
+const SOURCES = { claude: '🟠 Claude', grok: '⚫ Grok', gemini: '🔵 Gemini', chatgpt: '🟢 ChatGPT', other: '⚪ Other', unknown: '⚪ Unknown' }
 const STAGES = [
   { key: 'submitted', label: 'Submitted', hint: 'Cover letter on its way' },
   { key: 'letter_ready', label: 'Letter ready', hint: 'Fine-tune & send' },
@@ -157,7 +158,7 @@ function OpportunityCard({ o, app, selected, onToggle }) {
         {o.deadline && <span className={`tag ${expired ? 'warn' : ''}`}>⏰ {fmtDate(o.deadline)}</span>}
         {o.is_speculative && o.job_type !== 'Speculative' && <span className="tag">Speculative</span>}
         {o.status !== 'open' && <span className="tag warn">{o.status}</span>}
-        {o.source && o.source !== 'claude' && <span className="tag">via {o.source}</span>}
+        {o.source && <span className="tag src">{SOURCES[o.source] || o.source}</span>}
       </div>
       {open && (
         <dl className="details">
@@ -192,6 +193,7 @@ function OpportunityCard({ o, app, selected, onToggle }) {
 function Opportunities({ opps, apps, sections, reload }) {
   const [filter, setFilter] = useState('ALL')
   const [hideApplied, setHideApplied] = useState(false)
+  const [src, setSrc] = useState('ALL')
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(new Set())
   const [note, setNote] = useState('')
@@ -201,6 +203,7 @@ function Opportunities({ opps, apps, sections, reload }) {
 
   const filtered = opps.filter((o) =>
     (filter === 'ALL' || o.section === filter) &&
+    (src === 'ALL' || o.source === src) &&
     (!hideApplied || !appByOpp[o.id]) &&
     (!q || `${o.code} ${o.employer} ${o.role} ${o.location}`.toLowerCase().includes(q.toLowerCase())))
 
@@ -236,7 +239,15 @@ function Opportunities({ opps, apps, sections, reload }) {
             </button>
           ))}
         </div>
-        <label className="toggle"><input type="checkbox" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} /> Hide already selected</label>
+        <div className="row-between">
+          <label className="toggle"><input type="checkbox" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} /> Hide already selected</label>
+          <select className="src-select" value={src} onChange={(e) => setSrc(e.target.value)} aria-label="Found by AI tool">
+            <option value="ALL">All AI tools</option>
+            {[...new Set(opps.map((o) => o.source))].map((s) => (
+              <option key={s} value={s}>{SOURCES[s] || s} ({opps.filter((o) => o.source === s).length})</option>
+            ))}
+          </select>
+        </div>
       </div>
       {msg && <p className={msg.err ? 'error banner' : 'ok banner'} onClick={() => setMsg(null)}>{msg.text}</p>}
       {byDate.length === 0 && <p className="empty">No opportunities match.</p>}
@@ -363,6 +374,7 @@ function ApplicationCard({ a, reload }) {
       </div>
       <div className="tags">
         <span className="tag">Selected {fmtDate(a.selected_at?.slice(0, 10))}</span>
+        {o.source && <span className="tag src">{SOURCES[o.source] || o.source}</span>}
         {a.sent_on && <span className="tag">Sent {fmtDate(a.sent_on)}</span>}
         {waiting !== null && <span className={`tag ${waiting >= 14 ? 'warn' : ''}`}>⏳ {waiting} days waiting</span>}
         {a.response_on && <span className="tag good">Reply {fmtDate(a.response_on)} · {RESPONSE_TYPES.find((r) => r[0] === a.response_type)?.[1]}</span>}
@@ -440,7 +452,11 @@ function Applications({ apps, reload }) {
 /* ---------------- Insights ---------------- */
 function Insights({ apps }) {
   const [stats, setStats] = useState([])
-  useEffect(() => { supabase.from('section_stats').select('*').then(({ data }) => setStats(data || [])) }, [apps])
+  const [srcStats, setSrcStats] = useState([])
+  useEffect(() => {
+    supabase.from('section_stats').select('*').then(({ data }) => setStats(data || []))
+    supabase.from('source_stats').select('*').then(({ data }) => setSrcStats(data || []))
+  }, [apps])
   const sent = apps.filter((a) => a.sent_on)
   const replied = sent.filter((a) => a.response_on)
   const overdue = sent.filter((a) => !a.response_on && daysBetween(a.sent_on, today()) >= 14)
@@ -464,6 +480,17 @@ function Insights({ apps }) {
             <li>Selected: <b>{s.selected}</b> · Sent: <b>{s.sent}</b></li>
             <li>Responses: <b>{s.responses}</b> ({pct(s.responses, s.sent)}) · Positive: <b>{s.positive}</b></li>
             <li>Avg. days to response: <b>{s.avg_days_to_response ?? '—'}</b></li>
+          </ul>
+        </div>
+      ))}
+      <h3>By AI tool</h3>
+      {srcStats.map((s) => (
+        <div className="card stat" key={s.source}>
+          <strong>{SOURCES[s.source] || s.source}</strong>
+          <ul className="statlist">
+            <li>Opportunities found: <b>{s.opportunities}</b> (best-fit A: <b>{s.best_fit}</b>)</li>
+            <li>Selected: <b>{s.selected}</b> · Sent: <b>{s.sent}</b></li>
+            <li>Responses: <b>{s.responses}</b> ({pct(s.responses, s.sent)}) · Positive: <b>{s.positive}</b></li>
           </ul>
         </div>
       ))}
