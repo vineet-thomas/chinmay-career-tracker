@@ -169,7 +169,7 @@ function OpportunityCard({ o, app, selected, onToggle }) {
           {o.reference_no && <><dt>Reference</dt><dd>{o.reference_no}</dd></>}
           {o.contact_person && <><dt>Contact</dt><dd>{o.contact_person}</dd></>}
           {o.contact_email && <><dt>Email</dt><dd><a href={`mailto:${o.contact_email}`}>{o.contact_email}</a></dd></>}
-          {o.notes && <><dt>Notes</dt><dd>{o.notes}</dd></>}
+          {o.notes && <><dt>{o.status === 'open' ? 'Notes' : 'Notes / why closed'}</dt><dd>{o.notes}</dd></>}
           {o.link && <><dt>Link</dt><dd><a href={o.link} target="_blank" rel="noreferrer">Open posting ↗</a></dd></>}
         </dl>
       )}
@@ -194,6 +194,7 @@ function Opportunities({ opps, apps, sections, reload }) {
   const [filter, setFilter] = useState('ALL')
   const [hideApplied, setHideApplied] = useState(false)
   const [src, setSrc] = useState('ALL')
+  const [showClosed, setShowClosed] = useState(false)
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(new Set())
   const [note, setNote] = useState('')
@@ -204,6 +205,7 @@ function Opportunities({ opps, apps, sections, reload }) {
   const filtered = opps.filter((o) =>
     (filter === 'ALL' || o.section === filter) &&
     (src === 'ALL' || o.source === src) &&
+    (showClosed || o.status === 'open' || appByOpp[o.id]) &&
     (!hideApplied || !appByOpp[o.id]) &&
     (!q || `${o.code} ${o.employer} ${o.role} ${o.location}`.toLowerCase().includes(q.toLowerCase())))
 
@@ -240,7 +242,10 @@ function Opportunities({ opps, apps, sections, reload }) {
           ))}
         </div>
         <div className="row-between">
-          <label className="toggle"><input type="checkbox" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} /> Hide already selected</label>
+          <div style={{ display: 'grid', gap: 4 }}>
+            <label className="toggle"><input type="checkbox" checked={hideApplied} onChange={(e) => setHideApplied(e.target.checked)} /> Hide already selected</label>
+            <label className="toggle"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Show closed ({opps.filter((o) => o.status !== 'open').length})</label>
+          </div>
           <select className="src-select" value={src} onChange={(e) => setSrc(e.target.value)} aria-label="Found by AI tool">
             <option value="ALL">All AI tools</option>
             {[...new Set(opps.map((o) => o.source))].map((s) => (
@@ -449,11 +454,56 @@ function Applications({ apps, reload }) {
   )
 }
 
+/* ---------------- Daily monitoring ---------------- */
+const DEADLINE = '2026-12-15'
+function DailyPanel({ daily }) {
+  if (!daily.length) return null
+  const t = daily[0]
+  const daysLeft = Math.max(0, daysBetween(today(), DEADLINE))
+  const last7 = daily.slice(0, 7)
+  const sum = (k) => last7.reduce((n, d) => n + Number(d[k] || 0), 0)
+  const max = Math.max(1, ...daily.map((d) => Math.max(Number(d.selected), Number(d.sent), Number(d.responses))))
+  const rows = [...daily].reverse()
+  return (
+    <>
+      <div className="deadline">⏳ <b>{daysLeft}</b> days left to 15 Dec</div>
+      <h3>Today ({fmtDate(t.day)})</h3>
+      <div className="kpis">
+        <div className="kpi"><b>{t.selected}</b><span>Selected today</span></div>
+        <div className={`kpi ${Number(t.sent) === 0 ? 'alert' : ''}`}><b>{t.sent}</b><span>Applications sent today</span></div>
+        <div className="kpi"><b>{t.responses}</b><span>Replies today</span></div>
+        <div className="kpi"><b>{sum('sent')}</b><span>Sent last 7 days</span></div>
+      </div>
+      <h3>Day by day</h3>
+      <div className="legend"><span className="dot sel" />Selected <span className="dot snt" />Sent <span className="dot rsp" />Replies</div>
+      <div className="daychart">
+        {rows.map((d) => (
+          <div className="daycol" key={d.day} title={`${fmtDate(d.day)}: ${d.selected} selected, ${d.sent} sent, ${d.responses} replies`}>
+            <div className="bars">
+              <span className="bar sel" style={{ height: `${(100 * d.selected) / max}%` }} />
+              <span className="bar snt" style={{ height: `${(100 * d.sent) / max}%` }} />
+              <span className="bar rsp" style={{ height: `${(100 * d.responses) / max}%` }} />
+            </div>
+            <span className="daylbl">{new Date(d.day + 'T00:00:00').getDate()}</span>
+          </div>
+        ))}
+      </div>
+      <ul className="daylist">
+        {daily.slice(0, 7).map((d) => (
+          <li key={d.day}><span>{fmtDate(d.day)}</span><span>{d.selected} sel · <b>{d.sent} sent</b> · {d.responses} replies</span></li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
 /* ---------------- Insights ---------------- */
 function Insights({ apps }) {
   const [stats, setStats] = useState([])
   const [srcStats, setSrcStats] = useState([])
+  const [daily, setDaily] = useState([])
   useEffect(() => {
+    supabase.from('daily_activity').select('*').order('day', { ascending: false }).limit(21).then(({ data }) => setDaily(data || []))
     supabase.from('section_stats').select('*').then(({ data }) => setStats(data || []))
     supabase.from('source_stats').select('*').then(({ data }) => setSrcStats(data || []))
   }, [apps])
@@ -463,6 +513,8 @@ function Insights({ apps }) {
   const pct = (n, d) => (d ? Math.round((100 * n) / d) + '%' : '—')
   return (
     <>
+      <DailyPanel daily={daily} />
+      <h3>Overall</h3>
       <div className="kpis">
         <div className="kpi"><b>{apps.length}</b><span>Selected</span></div>
         <div className="kpi"><b>{sent.length}</b><span>Sent</span></div>
