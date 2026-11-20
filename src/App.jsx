@@ -502,7 +502,9 @@ function Insights({ apps }) {
   const [stats, setStats] = useState([])
   const [srcStats, setSrcStats] = useState([])
   const [daily, setDaily] = useState([])
+  const [aiAct, setAiAct] = useState([])
   useEffect(() => {
+    supabase.from('ai_tool_activity').select('*').then(({ data }) => setAiAct(data || []))
     supabase.from('daily_activity').select('*').order('day', { ascending: false }).limit(21).then(({ data }) => setDaily(data || []))
     supabase.from('section_stats').select('*').then(({ data }) => setStats(data || []))
     supabase.from('source_stats').select('*').then(({ data }) => setSrcStats(data || []))
@@ -535,7 +537,24 @@ function Insights({ apps }) {
           </ul>
         </div>
       ))}
-      <h3>By AI tool</h3>
+      <h3>AI tool contribution</h3>
+      {aiAct.map((t) => {
+        const idle = Number(t.added_last_7d) === 0
+        return (
+          <div className={`card stat ${idle ? 'idle' : ''}`} key={t.tool}>
+            <div className="row-between">
+              <strong>{SOURCES[t.tool] || t.tool}</strong>
+              <span className={`tag ${idle ? 'warn' : 'good'}`}>{idle ? 'Not contributing' : 'Active'}</span>
+            </div>
+            <ul className="statlist">
+              <li>Added last 7 days: <b>{t.added_last_7d}</b> · Total in database: <b>{t.total_in_db}</b></li>
+              <li>Last opening added: <b>{t.last_added ? new Date(t.last_added).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'never'}</b></li>
+              {t.tool !== 'claude' && <li>API reads: <b>{t.reads}</b> · Submissions/imports: <b>{t.submissions}</b> · Duplicates blocked: <b>{t.logged_duplicates}</b></li>}
+            </ul>
+          </div>
+        )
+      })}
+      <h3>Results by AI tool</h3>
       {srcStats.map((s) => (
         <div className="card stat" key={s.source}>
           <strong>{SOURCES[s.source] || s.source}</strong>

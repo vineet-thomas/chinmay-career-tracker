@@ -120,3 +120,5 @@ pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-
 .daylbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
 .daylist { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14px; }
 .daylist li { display: flex; justify-content: space-between; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+
+.card.idle { border-color: #f0c4be; background: #fffafa; }
